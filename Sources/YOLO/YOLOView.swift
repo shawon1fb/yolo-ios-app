@@ -136,12 +136,14 @@ public class YOLOView: UIView, VideoCaptureDelegate {
 
   public var capturedImage: UIImage?
   private var photoCaptureCompletion: ((UIImage?) -> Void)?
-
+  private let cameraPosition: AVCaptureDevice.Position
   public init(
     frame: CGRect,
     modelPathOrName: String,
-    task: YOLOTask
+    task: YOLOTask,
+    cameraPosition: AVCaptureDevice.Position = .back
   ) {
+    self.cameraPosition = cameraPosition
     self.videoCapture = VideoCapture()
     super.init(frame: frame)
     setModel(modelPathOrName: modelPathOrName, task: task)
@@ -149,13 +151,15 @@ public class YOLOView: UIView, VideoCaptureDelegate {
     self.setUpBoundingBoxViews()
     self.setupUI()
     self.videoCapture.delegate = self
-    start(position: .back)
+    start(position: cameraPosition)
     setupOverlayLayer()
   }
 
   required init?(coder: NSCoder) {
     self.videoCapture = VideoCapture()
+    self.cameraPosition = .back
     super.init(coder: coder)
+
   }
 
   public override func awakeFromNib() {
@@ -698,18 +702,18 @@ public class YOLOView: UIView, VideoCaptureDelegate {
     switchCameraButton = UIButton()
     switchCameraButton.setImage(
       UIImage(systemName: "camera.rotate", withConfiguration: config), for: .normal)
-    
+
     playButton.isEnabled = false
     pauseButton.isEnabled = true
     playButton.addTarget(self, action: #selector(playTapped), for: .touchUpInside)
     pauseButton.addTarget(self, action: #selector(pauseTapped), for: .touchUpInside)
     switchCameraButton.addTarget(self, action: #selector(switchCameraTapped), for: .touchUpInside)
-    
+
     setupToolbar()
-    
+
     self.addGestureRecognizer(UIPinchGestureRecognizer(target: self, action: #selector(pinch)))
   }
-  
+
   /// Configure a slider with common settings
   private func configureSlider(_ slider: UISlider, min: Float, max: Float, value: Float) {
     slider.minimumValue = min
@@ -719,7 +723,7 @@ public class YOLOView: UIView, VideoCaptureDelegate {
     slider.maximumTrackTintColor = .systemGray.withAlphaComponent(0.7)
     slider.addTarget(self, action: #selector(sliderChanged), for: .valueChanged)
   }
-  
+
   /// Setup toolbar with consistent styling
   private func setupToolbar() {
     toolbar.backgroundColor = .black.withAlphaComponent(0.7)
@@ -734,10 +738,10 @@ public class YOLOView: UIView, VideoCaptureDelegate {
     setupOverlayLayer()
     let isLandscape = bounds.width > bounds.height
     activityIndicator.frame = CGRect(x: center.x - 50, y: center.y - 50, width: 100, height: 100)
-    
+
     // Apply consistent toolbar styling
     applyToolbarStyling(isLandscape: isLandscape)
-    
+
     if isLandscape {
       layoutLandscape()
     } else {
@@ -746,7 +750,7 @@ public class YOLOView: UIView, VideoCaptureDelegate {
 
     self.videoCapture.previewLayer?.frame = self.bounds
   }
-  
+
   /// Apply consistent toolbar and button styling
   private func applyToolbarStyling(isLandscape: Bool) {
     toolbar.backgroundColor = .black.withAlphaComponent(0.7)
@@ -755,126 +759,126 @@ public class YOLOView: UIView, VideoCaptureDelegate {
       button.tintColor = buttonColor
     }
   }
-  
+
   /// Layout views for landscape orientation
   private func layoutLandscape() {
     let width = bounds.width
     let height = bounds.height
     let topMargin: CGFloat = 0
     let titleLabelHeight: CGFloat = height * 0.1
-    
+
     labelName.frame = CGRect(x: 0, y: topMargin, width: width, height: titleLabelHeight)
-    
+
     let subLabelHeight: CGFloat = height * 0.04
     labelFPS.frame = CGRect(
       x: 0, y: center.y - height * 0.24 - subLabelHeight,
       width: width, height: subLabelHeight
     )
-    
+
     let sliderWidth: CGFloat = width * 0.2
     let sliderHeight: CGFloat = height * 0.1
-    
+
     labelSliderNumItems.frame = CGRect(
       x: width * 0.1, y: labelFPS.frame.minY - sliderHeight,
       width: sliderWidth, height: sliderHeight
     )
-    
+
     sliderNumItems.frame = CGRect(
       x: width * 0.1, y: labelSliderNumItems.frame.maxY + 10,
       width: sliderWidth, height: sliderHeight
     )
-    
+
     labelSliderConf.frame = CGRect(
       x: width * 0.1, y: sliderNumItems.frame.maxY + 10,
       width: sliderWidth * 1.5, height: sliderHeight
     )
-    
+
     sliderConf.frame = CGRect(
       x: width * 0.1, y: labelSliderConf.frame.maxY + 10,
       width: sliderWidth, height: sliderHeight
     )
-    
+
     labelSliderIoU.frame = CGRect(
       x: width * 0.1, y: sliderConf.frame.maxY + 10,
       width: sliderWidth * 1.5, height: sliderHeight
     )
-    
+
     sliderIoU.frame = CGRect(
       x: width * 0.1, y: labelSliderIoU.frame.maxY + 10,
       width: sliderWidth, height: sliderHeight
     )
-    
+
     let zoomLabelWidth: CGFloat = width * 0.2
     labelZoom.frame = CGRect(
       x: center.x - zoomLabelWidth / 2, y: self.bounds.maxY - 120,
       width: zoomLabelWidth, height: height * 0.03
     )
-    
+
     layoutToolbarButtons(width: width, height: height)
   }
-  
+
   /// Layout views for portrait orientation
   private func layoutPortrait() {
     let width = bounds.width
     let height = bounds.height
     let topMargin: CGFloat = 0
     let titleLabelHeight: CGFloat = height * 0.1
-    
+
     labelName.frame = CGRect(x: 0, y: topMargin, width: width, height: titleLabelHeight)
-    
+
     let subLabelHeight: CGFloat = height * 0.04
     labelFPS.frame = CGRect(
       x: 0, y: labelName.frame.maxY + 15,
       width: width, height: subLabelHeight
     )
-    
+
     let sliderWidth: CGFloat = width * 0.46
     let sliderHeight: CGFloat = height * 0.02
-    
+
     sliderNumItems.frame = CGRect(
       x: width * 0.01, y: center.y - sliderHeight - height * 0.24,
       width: sliderWidth, height: sliderHeight
     )
-    
+
     labelSliderNumItems.frame = CGRect(
       x: width * 0.01, y: sliderNumItems.frame.minY - sliderHeight - 10,
       width: sliderWidth, height: sliderHeight
     )
-    
+
     labelSliderConf.frame = CGRect(
       x: width * 0.01, y: center.y + height * 0.24,
       width: sliderWidth * 1.5, height: sliderHeight
     )
-    
+
     sliderConf.frame = CGRect(
       x: width * 0.01, y: labelSliderConf.frame.maxY + 10,
       width: sliderWidth, height: sliderHeight
     )
-    
+
     labelSliderIoU.frame = CGRect(
       x: width * 0.01, y: sliderConf.frame.maxY + 10,
       width: sliderWidth * 1.5, height: sliderHeight
     )
-    
+
     sliderIoU.frame = CGRect(
       x: width * 0.01, y: labelSliderIoU.frame.maxY + 10,
       width: sliderWidth, height: sliderHeight
     )
-    
+
     let zoomLabelWidth: CGFloat = width * 0.2
     labelZoom.frame = CGRect(
       x: center.x - zoomLabelWidth / 2, y: self.bounds.maxY - 120,
       width: zoomLabelWidth, height: height * 0.03
     )
-    
+
     layoutToolbarButtons(width: width, height: height)
   }
-  
+
   /// Layout toolbar buttons (shared between orientations)
   private func layoutToolbarButtons(width: CGFloat, height: CGFloat) {
     let toolBarHeight: CGFloat = 66
     let buttonHeight: CGFloat = toolBarHeight * 0.75
-    
+
     toolbar.frame = CGRect(x: 0, y: height - toolBarHeight, width: width, height: toolBarHeight)
     playButton.frame = CGRect(x: 0, y: 0, width: buttonHeight, height: buttonHeight)
     pauseButton.frame = CGRect(

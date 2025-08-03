@@ -16,20 +16,21 @@ import SwiftUI
 
 /// A SwiftUI view that provides real-time camera-based object detection using YOLO models.
 public struct YOLOCamera: View {
-  @State private var yoloResult: YOLOResult?
-
   public let modelPathOrName: String
   public let task: YOLOTask
   public let cameraPosition: AVCaptureDevice.Position
+  let onDetection: ((YOLOResult) -> Void)?
 
   public init(
     modelPathOrName: String,
     task: YOLOTask = .detect,
-    cameraPosition: AVCaptureDevice.Position = .back
+    cameraPosition: AVCaptureDevice.Position = .back,
+    onDetection: ((YOLOResult) -> Void)? = nil
   ) {
     self.modelPathOrName = modelPathOrName
     self.task = task
     self.cameraPosition = cameraPosition
+    self.onDetection = onDetection
   }
 
   public var body: some View {
@@ -38,7 +39,7 @@ public struct YOLOCamera: View {
       task: task,
       cameraPosition: cameraPosition
     ) { result in
-      self.yoloResult = result
+      onDetection?(result)
     }
   }
 }
@@ -53,7 +54,9 @@ struct YOLOViewRepresentable: UIViewRepresentable {
     let yoloView = YOLOView(
       frame: .zero,
       modelPathOrName: modelPathOrName,
-      task: task
+      task: task,
+      cameraPosition: cameraPosition
+
     )
     return yoloView
   }
