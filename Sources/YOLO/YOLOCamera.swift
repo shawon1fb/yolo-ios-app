@@ -65,3 +65,83 @@ struct YOLOViewRepresentable: UIViewRepresentable {
     uiView.onDetection = onDetection
   }
 }
+
+struct YOLOViewRepresentableWithBinding: UIViewRepresentable {
+    let modelPathOrName: String
+    let task: YOLOTask
+    let cameraPosition: AVCaptureDevice.Position
+    @Binding var shouldCapture: Bool
+    let onDetection: ((YOLOResult) -> Void)?
+    let onPhotoCaptured: ((UIImage?) -> Void)?
+    
+    func makeUIView(context: Context) -> YOLOView {
+        let yoloView = YOLOView(
+            frame: .zero,
+            modelPathOrName: modelPathOrName,
+            task: task,
+            cameraPosition: cameraPosition
+        )
+        yoloView.hideControls(hiden: true)
+        return yoloView
+    }
+    
+    func updateUIView(_ uiView: YOLOView, context: Context) {
+        uiView.onDetection = onDetection
+        uiView.hideControls(hiden: true)
+        if shouldCapture {
+            DispatchQueue.main.async {
+                shouldCapture = false
+            }
+        
+            
+            uiView.capturePhoto { photo in
+                DispatchQueue.main.async {
+                    onPhotoCaptured?(photo)
+                }
+            }
+        }
+    }
+}
+
+// Alternative approach using @Binding for more control
+public struct YOLOCameraWithBinding: View {
+    public let modelPathOrName: String
+    public let task: YOLOTask
+    public let cameraPosition: AVCaptureDevice.Position
+    let onDetection: ((YOLOResult) -> Void)?
+    let onPhotoCaptured: ((UIImage?) -> Void)?
+    
+    @Binding var shouldCapture: Bool
+    @State var hideControls: Bool = false
+    
+    public init(
+        modelPathOrName: String,
+        task: YOLOTask = .detect,
+        cameraPosition: AVCaptureDevice.Position = .back,
+        shouldCapture: Binding<Bool>,
+        onDetection: ((YOLOResult) -> Void)? = nil,
+        onPhotoCaptured: ((UIImage?) -> Void)? = nil
+    ) {
+        self.modelPathOrName = modelPathOrName
+        self.task = task
+        self.cameraPosition = cameraPosition
+        self._shouldCapture = shouldCapture
+        self.onDetection = onDetection
+        self.onPhotoCaptured = onPhotoCaptured
+    }
+    
+    public var body: some View {
+        ZStack {
+            YOLOViewRepresentableWithBinding(
+                modelPathOrName: modelPathOrName,
+                task: task,
+                cameraPosition: cameraPosition,
+                shouldCapture: $shouldCapture,
+                onDetection: onDetection,
+                onPhotoCaptured: onPhotoCaptured
+            )
+            .edgesIgnoringSafeArea(.all)
+            
+        }
+    }
+}
