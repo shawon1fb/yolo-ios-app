@@ -71,6 +71,7 @@ struct YOLOViewRepresentableWithBinding: UIViewRepresentable {
     let task: YOLOTask
     let cameraPosition: AVCaptureDevice.Position
     @Binding var shouldCapture: Bool
+    @Binding var shouldCameraPause: Bool
     let onDetection: ((YOLOResult) -> Void)?
     let onPhotoCaptured: ((UIImage?) -> Void)?
     
@@ -100,6 +101,12 @@ struct YOLOViewRepresentableWithBinding: UIViewRepresentable {
                 }
             }
         }
+        
+        if shouldCameraPause {
+            uiView.stop()
+        }else{
+            uiView.resume()
+        }
     }
 }
 
@@ -112,6 +119,7 @@ public struct YOLOCameraWithBinding: View {
     let onPhotoCaptured: ((UIImage?) -> Void)?
     
     @Binding var shouldCapture: Bool
+    @Binding var shouldCameraPause: Bool
     @State var hideControls: Bool = false
     
     public init(
@@ -119,6 +127,7 @@ public struct YOLOCameraWithBinding: View {
         task: YOLOTask = .detect,
         cameraPosition: AVCaptureDevice.Position = .back,
         shouldCapture: Binding<Bool>,
+        shouldCameraPause: Binding<Bool>,
         onDetection: ((YOLOResult) -> Void)? = nil,
         onPhotoCaptured: ((UIImage?) -> Void)? = nil
     ) {
@@ -128,20 +137,18 @@ public struct YOLOCameraWithBinding: View {
         self._shouldCapture = shouldCapture
         self.onDetection = onDetection
         self.onPhotoCaptured = onPhotoCaptured
+        self._shouldCameraPause = shouldCameraPause
     }
     
     public var body: some View {
-        ZStack {
-            YOLOViewRepresentableWithBinding(
-                modelPathOrName: modelPathOrName,
-                task: task,
-                cameraPosition: cameraPosition,
-                shouldCapture: $shouldCapture,
-                onDetection: onDetection,
-                onPhotoCaptured: onPhotoCaptured
-            )
-            .edgesIgnoringSafeArea(.all)
-            
-        }
+        YOLOViewRepresentableWithBinding(
+            modelPathOrName: modelPathOrName,
+            task: task,
+            cameraPosition: cameraPosition,
+            shouldCapture: $shouldCapture,
+            shouldCameraPause: $shouldCameraPause,
+            onDetection: onDetection,
+            onPhotoCaptured: onPhotoCaptured
+        )
     }
 }
