@@ -103,9 +103,14 @@ struct YOLOViewRepresentableWithBinding: UIViewRepresentable {
         }
         
         if shouldCameraPause {
-            uiView.stop()
+            DispatchQueue.main.async {
+                uiView.stop()
+            }
+           
         }else{
-            uiView.resume()
+            DispatchQueue.main.async {
+                uiView.resume()
+            }
         }
     }
 }
