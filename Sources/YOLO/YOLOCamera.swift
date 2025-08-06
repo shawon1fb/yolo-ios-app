@@ -109,7 +109,10 @@ struct YOLOViewRepresentableWithBinding: UIViewRepresentable {
            
         }else{
             DispatchQueue.main.async {
-                uiView.resume()
+                if uiView.isRunning(){
+                    uiView.resume()
+                }
+                
             }
         }
     }

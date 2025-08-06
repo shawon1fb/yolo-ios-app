@@ -323,6 +323,10 @@ public class YOLOView: UIView, VideoCaptureDelegate {
     videoCapture.start()
   }
 
+  public func isRunning() -> Bool {
+    return videoCapture.captureSession.isRunning
+  }
+    
   func setUpBoundingBoxViews() {
     // Ensure all bounding box views are initialized up to the maximum allowed.
     while boundingBoxViews.count < maxBoundingBoxViews {
@@ -1027,25 +1031,23 @@ public class YOLOView: UIView, VideoCaptureDelegate {
   public func setInferenceFlag(ok: Bool) {
     videoCapture.inferenceOK = ok
   }
-    
-   public func hideControls(hiden: Bool){
-      labelName.isHidden = hiden
-      labelFPS.isHidden = hiden
-      labelSliderNumItems.isHidden = hiden
-      sliderNumItems.isHidden = hiden
-      labelSliderConf.isHidden = hiden
-      sliderConf.isHidden = hiden
-      labelSliderIoU.isHidden = hiden
-      sliderIoU.isHidden = hiden
-      labelZoom.isHidden = hiden
-      playButton.isHidden = hiden
-      pauseButton.isHidden = hiden
-      switchCameraButton.isHidden = hiden
-      toolbar.isHidden = hiden
-    }
+
+  public func hideControls(hiden: Bool) {
+    labelName.isHidden = hiden
+    labelFPS.isHidden = hiden
+    labelSliderNumItems.isHidden = hiden
+    sliderNumItems.isHidden = hiden
+    labelSliderConf.isHidden = hiden
+    sliderConf.isHidden = hiden
+    labelSliderIoU.isHidden = hiden
+    sliderIoU.isHidden = hiden
+    labelZoom.isHidden = hiden
+    playButton.isHidden = hiden
+    pauseButton.isHidden = hiden
+    switchCameraButton.isHidden = hiden
+    toolbar.isHidden = hiden
+  }
 }
-
-
 
 extension YOLOView: AVCapturePhotoCaptureDelegate {
   public func photoOutput(
