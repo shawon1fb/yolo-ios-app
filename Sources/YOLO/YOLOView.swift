@@ -320,6 +320,8 @@ public class YOLOView: UIView, VideoCaptureDelegate {
   }
 
   public func resume() {
+      print("busy \(busy)")
+      if busy { return }
     videoCapture.start()
   }
 

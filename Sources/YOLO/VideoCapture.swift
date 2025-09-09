@@ -59,7 +59,9 @@ class VideoCapture: NSObject, @unchecked Sendable {
   var longSide: CGFloat = 3
   var shortSide: CGFloat = 4
   var frameSizeCaptured = false
-
+  
+  // Add session state tracking
+  private var isSessionConfigured = false
   private var currentBuffer: CVPixelBuffer?
 
   func setUp(
@@ -148,33 +150,129 @@ class VideoCapture: NSObject, @unchecked Sendable {
     captureDevice!.unlockForConfiguration()
 
     captureSession.commitConfiguration()
+    isSessionConfigured = true
     return true
   }
 
+  // FIXED: Use consistent queue and proper state management
   func start() {
-    if !captureSession.isRunning {
-      DispatchQueue.global().async {
+    cameraQueue.async {
+      guard self.isSessionConfigured else {
+        debugPrint("Session not configured, cannot start")
+        return
+      }
+      
+      if !self.captureSession.isRunning {
+        debugPrint("Starting capture session")
         self.captureSession.startRunning()
+        
+        // Ensure preview layer connection is maintained
+        DispatchQueue.main.async {
+          if let previewLayer = self.previewLayer,
+             let connection = previewLayer.connection {
+            if !connection.isEnabled {
+              connection.isEnabled = true
+            }
+          }
+        }
+      } else {
+        debugPrint("Capture session already running")
       }
     }
   }
 
+  // FIXED: Use consistent queue
   func stop() {
-    if captureSession.isRunning {
-      DispatchQueue.global().async {
+    debugPrint("Stopping capture session - isRunning: \(captureSession.isRunning)")
+    cameraQueue.async {
+      if self.captureSession.isRunning {
+        debugPrint("Actually stopping capture session")
         self.captureSession.stopRunning()
       }
     }
   }
+  
+  // NEW: Reset internal state
+  func reset() {
+    cameraQueue.async {
+      self.currentBuffer = nil
+      self.inferenceOK = true
+      self.frameSizeCaptured = false
+      debugPrint("VideoCapture state reset")
+    }
+  }
+  
+  // NEW: Restart method with proper sequencing
+  func restart() {
+    debugPrint("Restarting VideoCapture")
+    stop()
+    reset()
+    
+    // Add a small delay to ensure stop completes
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+      self.start()
+    }
+  }
+  
+  // NEW: Check if session is properly configured
+  func ensureSessionIsReady() -> Bool {
+    guard isSessionConfigured else {
+      debugPrint("Session not configured")
+      return false
+    }
+    
+    guard captureSession.inputs.count > 0 && captureSession.outputs.count > 0 else {
+      debugPrint("Session missing inputs or outputs")
+      return false
+    }
+    
+    return true
+  }
+  
+  // NEW: Force cleanup method
+  func cleanup() {
+    cameraQueue.async {
+      if self.captureSession.isRunning {
+        self.captureSession.stopRunning()
+      }
+      
+      // Remove all inputs and outputs
+      for input in self.captureSession.inputs {
+        self.captureSession.removeInput(input)
+      }
+      
+      for output in self.captureSession.outputs {
+        self.captureSession.removeOutput(output)
+      }
+      
+      self.videoInput = nil
+      self.captureDevice = nil
+      self.currentBuffer = nil
+      self.isSessionConfigured = false
+      
+      DispatchQueue.main.async {
+        self.previewLayer?.removeFromSuperlayer()
+        self.previewLayer = nil
+      }
+      
+      debugPrint("VideoCapture cleaned up")
+    }
+  }
 
   func setZoomRatio(ratio: CGFloat) {
-    do {
-      try captureDevice!.lockForConfiguration()
-      defer {
-        captureDevice!.unlockForConfiguration()
+    cameraQueue.async {
+      guard let captureDevice = self.captureDevice else { return }
+      
+      do {
+        try captureDevice.lockForConfiguration()
+        defer {
+          captureDevice.unlockForConfiguration()
+        }
+        captureDevice.videoZoomFactor = ratio
+      } catch {
+        debugPrint("Failed to set zoom ratio: \(error)")
       }
-      captureDevice!.videoZoomFactor = ratio
-    } catch {}
+    }
   }
 
   private func predictOnFrame(sampleBuffer: CMSampleBuffer) {
@@ -182,53 +280,69 @@ class VideoCapture: NSObject, @unchecked Sendable {
       print("predictor is nil")
       return
     }
-    if currentBuffer == nil, let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
-      currentBuffer = pixelBuffer
-      if !frameSizeCaptured {
-        let frameWidth = CGFloat(CVPixelBufferGetWidth(pixelBuffer))
-        let frameHeight = CGFloat(CVPixelBufferGetHeight(pixelBuffer))
-        longSide = max(frameWidth, frameHeight)
-        shortSide = min(frameWidth, frameHeight)
-        frameSizeCaptured = true
-      }
-
-      /// - Tag: MappingOrientation
-      // The frame is always oriented based on the camera sensor,
-      // so in most cases Vision needs to rotate it for the model to work as expected.
-      var imageOrientation: CGImagePropertyOrientation = .up
-      //            switch UIDevice.current.orientation {
-      //            case .portrait:
-      //                imageOrientation = .up
-      //            case .portraitUpsideDown:
-      //                imageOrientation = .down
-      //            case .landscapeLeft:
-      //                imageOrientation = .up
-      //            case .landscapeRight:
-      //                imageOrientation = .up
-      //            case .unknown:
-      //                imageOrientation = .up
-      //
-      //            default:
-      //                imageOrientation = .up
-      //            }
-
-      predictor.predict(sampleBuffer: sampleBuffer, onResultsListener: self, onInferenceTime: self)
-      currentBuffer = nil
+    
+    // FIXED: Better buffer management
+    guard currentBuffer == nil else {
+      // Skip frame if still processing previous one
+      return
     }
+    
+    guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+      print("Failed to get pixel buffer")
+      return
+    }
+    
+    currentBuffer = pixelBuffer
+    
+    if !frameSizeCaptured {
+      let frameWidth = CGFloat(CVPixelBufferGetWidth(pixelBuffer))
+      let frameHeight = CGFloat(CVPixelBufferGetHeight(pixelBuffer))
+      longSide = max(frameWidth, frameHeight)
+      shortSide = min(frameWidth, frameHeight)
+      frameSizeCaptured = true
+      debugPrint("Frame size captured: \(frameWidth) x \(frameHeight)")
+    }
+
+    /// - Tag: MappingOrientation
+    // The frame is always oriented based on the camera sensor,
+    // so in most cases Vision needs to rotate it for the model to work as expected.
+    var imageOrientation: CGImagePropertyOrientation = .up
+    //            switch UIDevice.current.orientation {
+    //            case .portrait:
+    //                imageOrientation = .up
+    //            case .portraitUpsideDown:
+    //                imageOrientation = .down
+    //            case .landscapeLeft:
+    //                imageOrientation = .up
+    //            case .landscapeRight:
+    //                imageOrientation = .up
+    //            case .unknown:
+    //                imageOrientation = .up
+    //
+    //            default:
+    //                imageOrientation = .up
+    //            }
+
+    predictor.predict(sampleBuffer: sampleBuffer, onResultsListener: self, onInferenceTime: self)
+    currentBuffer = nil
   }
 
   func updateVideoOrientation(orientation: AVCaptureVideoOrientation) {
-    guard let connection = videoOutput.connection(with: .video) else { return }
+    cameraQueue.async {
+      guard let connection = self.videoOutput.connection(with: .video) else { return }
 
-    connection.videoOrientation = orientation
-    let currentInput = self.captureSession.inputs.first as? AVCaptureDeviceInput
-    if currentInput?.device.position == .front {
-      connection.isVideoMirrored = true
-    } else {
-      connection.isVideoMirrored = false
+      connection.videoOrientation = orientation
+      let currentInput = self.captureSession.inputs.first as? AVCaptureDeviceInput
+      if currentInput?.device.position == .front {
+        connection.isVideoMirrored = true
+      } else {
+        connection.isVideoMirrored = false
+      }
+      
+      DispatchQueue.main.async {
+        self.previewLayer?.connection?.videoOrientation = connection.videoOrientation
+      }
     }
-    let o = connection.videoOrientation
-    self.previewLayer?.connection?.videoOrientation = connection.videoOrientation
   }
 }
 
@@ -238,6 +352,7 @@ extension VideoCapture: AVCaptureVideoDataOutputSampleBufferDelegate {
     from connection: AVCaptureConnection
   ) {
     guard inferenceOK else { return }
+    guard ensureSessionIsReady() else { return }
     predictOnFrame(sampleBuffer: sampleBuffer)
   }
 }
